@@ -1,112 +1,41 @@
-# Recovery after evaluation cleanup
+# Dockerストレージの復旧
 
-The project uses plain Docker named volumes with the VM Docker data-root at
-`/home/student/data/docker`. The evaluation's removal of
-`/home/student/data/*` therefore deletes the daemon's metadata as well as the
-application data. Keeping the old daemon running can make the next build fail
-with a missing `docker/tmp` directory.
+Dockerの保存先 `/home/student/data/docker` が削除された後、デーモンを起動したままビルドすると、`docker/tmp` が見つからないなどのエラーが起こることがあります。
 
-## What Make does
+Recovery behavior when the configured Docker data directory has been removed.
 
-`make`, `make up`, `make build`, `make backup`, and `make restore-check` run
-`srcs/tools/prepare-storage.sh`, then the existing configuration checks, before
-calling Compose. The recovery script:
+## 自動復旧の条件
 
-1. Returns immediately if the expected Docker data-root directory exists.
-2. If it is missing, verifies that Docker reports that exact data-root, the
-   active Docker endpoint is the local system socket, and
-   no running or stopped containers remain.
-3. Uses the root-owned helper when called by student; it checks that
-   `docker.service` is active and its main process is `dockerd`.
-4. Restarts that service once and confirms that the daemon is accessible and
-   has recreated the expected directory.
+`make`・`make build`・`make backup`・`make restore-check` は、最初に保存先を確認します。保存先がなく、次の条件が揃うとDockerを一度再起動してディレクトリを再作成します。
 
-If a prerequisite or restart fails, Make stops before building. The script
-does not delete files, remove Docker objects, migrate storage, change daemon
-configuration, or create secrets. `make check-config` remains read-only.
-Recovery supports the VM's rootful Docker managed by systemd; remote daemons
-and rootless Docker endpoints require their own administrator procedure.
+- Dockerのdata-rootが設定された保存先と一致する。
+- 接続先がVM内のシステムDockerソケットである。
+- 起動中・停止中のコンテナが1つも残っていない。
+- systemdのDockerサービスが稼働しており、管理ヘルパーを使えるかrootで実行している。
 
-On the supplied VM, the [one-time setup in DEV_DOC](../../DEV_DOC.md#prerequisites) installs
-`/usr/local/sbin/inception-storage-admin` and its narrow sudo policy.
-`student` can then run `make` and `make fclean` directly. Only fixed helper
-operations run as root; builds and Compose remain under the ordinary account.
+ヘルパーの導入方法は [VMの初期設定](../../DEV_DOC.md#vm-setup) にあります。
 
-This is a fresh installation after intentional data deletion. Existing
-`srcs/.env` and `secrets/` provide the configuration and initial credentials.
-Deleted posts, database contents, and backup generations are not recovered.
-Partial deletion of an existing data-root is not repaired automatically.
+## 復旧と確認
 
-## Verify the evaluation sequence
+Inception のルートで実行します。
 
-Use a disposable VM with the same Docker configuration and project source.
-The cleanup below deletes all Docker resources and application data in that
-VM. Copy any data that must be retained to a verified archive outside
-`/home/student/data` first. Keep the local environment and secrets outside
-that directory too.
+```sh
+make
+make check-config
+make ps
+```
 
-In the student shell with the installed helper, from the repository root:
+保存先が正常に存在する場合は、通常のビルド・起動へ進みます。`make check-config` は読み取り専用の確認です。
 
-1. Start a working installation and check its data-root:
+復旧時は、残っている環境ファイルとsecretを使ってサイトを新規初期化します。削除された記事・DB・バックアップを戻すには、別途保管したバックアップが必要です。保存先内部の部分的な破損は自動修復しません。
 
-   ```sh
-   make
-   docker info --format '{{.DockerRootDir}}'
-   ```
+## 復旧できない場合
 
-2. Run the complete evaluation cleanup:
+| 原因 | 対応 |
+| --- | --- |
+| Dockerの保存先が違う | デーモン設定とMakeの `DATA_DIR` を確認 |
+| コンテナが残っている | 対象とデータの状態を管理者が確認 |
+| ヘルパーの権限がない | 開発者ガイドの初回設定を確認 |
+| Dockerサービスが停止している | VM管理者がサービスを起動 |
 
-   ```sh
-   make fclean
-   docker ps -aq
-   docker images -qa
-   docker volume ls -q
-   docker network ls
-   ```
-
-   This target requires the installed helper permission and the matching
-   local system Docker daemon.
-   It stops/removes all containers, images, volumes and custom networks,
-   checks that resources and nested mounts are gone, then deletes
-   `/home/student/data/*`. It skips empty resource lists and keeps the
-   built-in networks. Unsafe paths, source/configuration inside the deletion
-   path, or failed removals stop the sequence. The helper provides the
-   permissions requested by the evaluation's final `sudo rm -rf` command.
-
-3. Leave Docker running and run `make`. Expect the storage-recovery message,
-   then the normal image build and Compose startup. Inspect:
-
-   ```sh
-   make
-   make check-config
-   make ps
-   docker volume inspect inception_mariadb_data inception_wordpress_data
-   curl --insecure --head https://student.42.fr
-   ```
-
-   The two required volumes must use driver `local`, have no bind options, and
-   have mountpoints beneath `/home/student/data/docker/volumes`. MariaDB,
-   Redis, and WordPress must become healthy. Verify the two WordPress users,
-   login, HTTPS response, and database access.
-
-4. Save some application content, record
-   `systemctl show --property=MainPID --value docker.service`, and run `make`
-   again. The daemon PID and saved content should remain unchanged. Also
-   verify persistence after container recreation and VM reboot.
-
-## Automated checks
-
-`make test` exercises the decision logic with mocked Docker, systemd and
-cleanup commands. It covers existing/missing storage, endpoint selection,
-remaining resources, missing privileges, unsafe cleanup paths, failed
-removals and recovery failures. It makes no changes to a running Docker daemon
-or real application data.
-
-A separate local test reproduced the missing-storage build failure with a
-private Docker 27.3.1 daemon, then ran the production recovery script through a
-test service adapter. Image rebuild, new named volumes, networks, containers,
-and data persistence succeeded. That test used rootless Docker with `vfs` and
-does not replace the VM's systemd and full WordPress stack validation.
-Use the sequence above on the project VM for that validation; the
-[service verification procedures](../../USER_DOC.md#service-verification-procedures) cover the
-full application checks.
+復旧の判定と失敗時の動作は、`make test` のモックテストで確認できます。
