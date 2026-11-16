@@ -18,6 +18,12 @@ test:
 	sh ./srcs/tests/test-fclean.sh
 	sh ./srcs/tests/test-storage-admin.sh
 	sh ./srcs/tests/test-service-regressions.sh
+	sh -n ./srcs/tests/test-live.sh
+
+test-live: check-config
+	sh ./srcs/tests/test-live.sh
+
+.PHONY: test-live
 
 prepare:
 	DATA_DIR="$(DATA_DIR)" ./srcs/tools/prepare-storage.sh

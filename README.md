@@ -63,6 +63,14 @@ Runs storage recovery, cleanup, administration-helper, and service regression ch
 
 This project's [user guide](USER_DOC.md) covers daily operation; the [developer guide](DEV_DOC.md) covers setup, configuration, and development.
 
+### Tests
+
+```sh
+make test
+```
+
+`make test` runs isolated shell regression tests without starting containers. To inspect an already running VM stack, use `make test-live`; it verifies configuration, core-service health, and HTTPS without starting or stopping services. Prepare the VM, local environment file, and secrets first.
+
 ## 日本語
 
 ブラウザーから記事を投稿・閲覧できるWordPressサイトを、Dockerで構築するプロジェクトです。Webへの接続を受けるNGINX、サイトを動かすWordPress、記事やユーザー情報を保存するMariaDBを組み合わせます。
@@ -125,3 +133,11 @@ make test
 - パスワードは `secrets/` のファイルで渡し、通常の設定は `srcs/.env` に分けています。
 
 詳しい操作は [利用者ガイド](USER_DOC.md)、構築・開発手順は [開発者ガイド](DEV_DOC.md) を参照してください。
+
+### テスト
+
+```sh
+make test
+```
+
+`make test` はコンテナを起動せず、隔離したシェルの回帰テストを実行します。起動済みVMの実機確認は `make test-live` で行い、設定・主要サービスの正常性・HTTPSを検証します。サービスの起動・停止は行いません。VMとローカルの環境設定・秘密ファイルを事前に用意します。
