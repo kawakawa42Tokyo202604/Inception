@@ -1,6 +1,6 @@
 # Inception の開発・環境構築
 
-Docker環境の準備、設定、ビルドと検証の手順です。この構成は `student` ユーザーを使うLinux VMを想定しています。コマンドは Inception のルートで実行します。
+Docker環境の準備、設定、ビルドと検証の手順です。`student` はLinux VMのユーザー名の設定例です。別のユーザーを使う場合は、`LOGIN`・管理ヘルパー・sudoers・Dockerの保存先を同じ名前にそろえます。コマンドは Inception のルートで実行します。
 
 Setup and development notes for the Docker Compose stack.
 
